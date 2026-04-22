@@ -651,8 +651,22 @@
   var isPlaying = false;
 
   function startMusic() {
-    document.getElementById('bgAudio').play().catch(function(e){});
-    isPlaying = true;
+    var audio = document.getElementById('bgAudio');
+    var p = audio.play();
+    if (p !== undefined) {
+      p.then(function() {
+        isPlaying = true;
+      }).catch(function(err) {
+        isPlaying = false;
+        var btn  = document.getElementById('music-btn');
+        var icon = btn.querySelector('.btn-icon');
+        icon.textContent = '♪';
+        btn.classList.remove('playing');
+        console.warn('Audio play failed:', err);
+      });
+    } else {
+      isPlaying = true;
+    }
   }
 
   function stopMusic() {
@@ -678,13 +692,28 @@
     var splash = document.getElementById('splash');
     splash.classList.add('fade-out');
     setTimeout(function() { splash.style.display = 'none'; }, 800);
-    startMusic();
-    var btn  = document.getElementById('music-btn');
-    var icon = btn.querySelector('.btn-icon');
-    icon.textContent = '♫';
-    btn.classList.add('playing');
+
+    var audio = document.getElementById('bgAudio');
+    var p = audio.play();
+    if (p !== undefined) {
+      p.then(function() {
+        isPlaying = true;
+        var btn  = document.getElementById('music-btn');
+        var icon = btn.querySelector('.btn-icon');
+        icon.textContent = '♫';
+        btn.classList.add('playing');
+      }).catch(function(err) {
+        console.warn('Audio play failed on enter:', err);
+      });
+    } else {
+      isPlaying = true;
+      var btn  = document.getElementById('music-btn');
+      var icon = btn.querySelector('.btn-icon');
+      icon.textContent = '♫';
+      btn.classList.add('playing');
+    }
   }
 </script>
-<audio id="bgAudio" src="waltz2.mp3" loop preload="none" style="display:none"></audio>
+<audio id="bgAudio" src="waltz2.mp3" loop preload="auto" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none;"></audio>
 </body>
 </html>
