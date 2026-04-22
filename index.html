@@ -540,126 +540,153 @@
   scaleCard();
 
   /* ═══════════════════════════════════════════════════
-     Background Music  — Web Audio API
-     Ambient jazz-inspired loop in A minor pentatonic
+     Background Music — BWV 1007 Cello Suite No.1 Prelude
+     Synthesized via Web Audio API (cello-like timbre)
+     G Major · 32 bars × 8 sixteenth notes · ♩≈75 BPM
   ═══════════════════════════════════════════════════ */
-  var audioCtx   = null;
-  var masterGain = null;
-  var isPlaying  = false;
-  var loopTimer  = null;
 
-  var BPM  = 72;
-  var BEAT = 60 / BPM; // seconds per beat
+  var audioCtx    = null;
+  var masterGain  = null;
+  var reverbInput = null;
+  var isPlaying   = false;
+  var loopTimer   = null;
 
-  // [freq_hz, start_beat, duration_beats, velocity 0-1]
-  var MELODY = [
-    [440.00,  0.0,  2.0,  0.55],  // A4
-    [392.00,  2.0,  1.0,  0.48],  // G4
-    [329.63,  3.0,  1.5,  0.52],  // E4
-    [293.66,  4.5,  0.75, 0.46],  // D4
-    [261.63,  5.25, 2.25, 0.50],  // C4
-    [293.66,  7.5,  0.75, 0.44],  // D4
-    [329.63,  8.25, 1.5,  0.52],  // E4
-    [392.00,  9.75, 1.25, 0.50],  // G4
-    [440.00,  11.0, 2.0,  0.56],  // A4
-    [392.00,  13.0, 0.75, 0.44],  // G4
-    [329.63,  13.75,1.5,  0.50],  // E4
-    [261.63,  15.25,1.75, 0.46],  // C4
-    [220.00,  17.0, 3.0,  0.48],  // A3
+  // MIDI note number → frequency in Hz
+  function midiToHz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+
+  // BWV 1007 note sequence — MIDI numbers, 8 sixteenth-notes per bar
+  // Ref: G2=43 D3=50 G3=55 B3=59 D4=62  C3=48 E3=52 C4=60 E4=64
+  //      F#3=54 A3=57 F#4=66  B2=47 A2=45 F#2=42  E2=40 Eb3=51
+  var BWV1007 = [
+    // ── Section A · Bars 1-8 · Opening in G major ──────────────
+    [43,50,55,59,62,59,55,50], //  1  G major
+    [43,52,55,60,64,60,55,52], //  2  C / G
+    [50,50,54,57,62,57,54,50], //  3  G / D
+    [43,50,55,59,62,59,55,50], //  4  G major
+    [43,52,55,60,64,60,55,52], //  5  C / G
+    [47,50,55,59,62,59,55,50], //  6  G / B
+    [45,52,57,60,64,60,57,52], //  7  Am7
+    [42,50,54,57,62,57,54,50], //  8  D7 / F#
+    // ── Section B · Bars 9-16 · Harmonic development ───────────
+    [43,50,55,59,62,59,55,50], //  9  G major
+    [53,50,55,59,62,59,55,50], // 10  G7 / F
+    [52,48,55,60,64,60,55,48], // 11  C / E
+    [51,48,55,60,63,60,55,48], // 12  Cm / Eb
+    [50,50,55,59,62,59,55,50], // 13  G / D
+    [50,52,57,60,64,60,57,52], // 14  Am7 / D
+    [50,54,57,60,66,60,57,54], // 15  D7
+    [43,50,55,59,62,59,55,50], // 16  G major
+    // ── Section C · Bars 17-24 · Minor episode ─────────────────
+    [40,47,52,55,59,55,52,47], // 17  Em
+    [40,45,52,57,61,57,52,45], // 18  A7 / E  (C#4=61)
+    [45,52,57,60,64,60,57,52], // 19  Am
+    [43,52,57,60,64,60,57,52], // 20  Am / G
+    [42,54,57,60,63,60,57,54], // 21  F#dim7  (Eb4=63)
+    [47,54,57,63,66,63,57,54], // 22  B7      (D#4=63)
+    [40,47,52,55,59,55,52,47], // 23  Em
+    [36,48,52,55,60,55,52,48], // 24  C major (C2=36)
+    // ── Section D · Bars 25-32 · Return & cadence ──────────────
+    [50,50,55,59,62,59,55,50], // 25  G / D
+    [50,52,57,60,64,60,57,52], // 26  Am7 / D
+    [50,54,57,60,66,60,57,54], // 27  D7
+    [43,50,55,59,62,59,55,50], // 28  G major
+    [43,52,55,60,64,60,55,52], // 29  C / G
+    [50,50,54,57,62,57,54,50], // 30  G / D
+    [50,54,57,60,66,60,57,54], // 31  D7
+    [43,50,55,59,62,59,55,50], // 32  G major (loop end)
   ];
 
-  var BASS = [
-    [110.00,  0.0,  5.0,  0.36],  // A2
-    [98.00,   5.5,  4.5,  0.32],  // G2
-    [130.81,  10.5, 4.5,  0.34],  // C3
-    [110.00,  15.5, 4.5,  0.38],  // A2
-  ];
+  var NOTE     = 0.200;                          // 16th-note ≈ ♩=75 BPM
+  var LOOP_DUR = BWV1007.length * 8 * NOTE;      // ≈ 51.2 s
 
-  // Soft harmony chords (low volume background pads)
-  var PADS = [
-    // Am chord tones spread
-    [220.00,  0.0,  10.0, 0.15],
-    [261.63,  0.0,  10.0, 0.12],
-    [329.63,  0.0,  10.0, 0.10],
-    // C chord pad
-    [130.81,  10.0, 10.0, 0.12],
-    [261.63,  10.0, 10.0, 0.10],
-    [329.63,  10.0, 10.0, 0.08],
-  ];
-
-  var LOOP_BEATS = 20;
-
-  function initAudio() {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
+  /* ── Audio graph setup ────────────────────────────── */
+  function setupAudio() {
+    audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.22;
-
-    // Gentle delay for warmth
-    var delay     = audioCtx.createDelay(2.0);
-    var delayGain = audioCtx.createGain();
-    var feedGain  = audioCtx.createGain();
-    delay.delayTime.value = BEAT * 0.75;
-    delayGain.gain.value  = 0.22;
-    feedGain.gain.value   = 0.18; // feedback amount
-
-    // masterGain -> destination (dry)
+    masterGain.gain.value = 0.30;
     masterGain.connect(audioCtx.destination);
-    // masterGain -> delay -> delayGain -> destination (wet)
-    masterGain.connect(delay);
-    delay.connect(delayGain);
-    delayGain.connect(audioCtx.destination);
-    // feedback loop (limited)
-    delayGain.connect(feedGain);
-    feedGain.connect(delay);
+
+    // Hall reverb: three parallel comb filters → wet bus
+    reverbInput = audioCtx.createGain();
+    var wetBus  = audioCtx.createGain();
+    wetBus.gain.value = 0.26;
+    wetBus.connect(audioCtx.destination);
+
+    [[0.37, 0.43], [0.55, 0.38], [0.73, 0.34]].forEach(function(p) {
+      var d = audioCtx.createDelay(2.5);
+      var g = audioCtx.createGain();
+      var f = audioCtx.createBiquadFilter();
+      d.delayTime.value = p[0];
+      g.gain.value      = p[1];
+      f.type = 'lowpass'; f.frequency.value = 3000;
+      reverbInput.connect(d);
+      d.connect(f); f.connect(g);
+      g.connect(d);       // comb feedback
+      g.connect(wetBus);  // wet output
+    });
   }
 
-  function playNote(freq, startTime, durationSec, velocity, type) {
-    type = type || 'triangle';
+  /* ── Cello note synthesizer ───────────────────────── */
+  function playCelloNote(midi, t0, dur, vel) {
+    var freq = midiToHz(midi);
     var osc  = audioCtx.createOscillator();
-    var gain = audioCtx.createGain();
+    var osc2 = audioCtx.createOscillator();
+    var filt = audioCtx.createBiquadFilter();
+    var gn   = audioCtx.createGain();
 
-    osc.type = type;
-    osc.frequency.value = freq;
+    // Two detuned sawtooth waves → warm cello body
+    osc.type  = 'sawtooth'; osc.frequency.value  = freq;
+    osc2.type = 'sawtooth'; osc2.frequency.value = freq * 1.0028;
 
-    // ADSR envelope
-    var atk = 0.06;
-    var rel = Math.min(durationSec * 0.4, 0.8);
-    gain.gain.setValueAtTime(0.001, startTime);
-    gain.gain.linearRampToValueAtTime(velocity, startTime + atk);
-    gain.gain.setValueAtTime(velocity * 0.75, startTime + durationSec - rel);
-    gain.gain.exponentialRampToValueAtTime(0.001, startTime + durationSec);
+    // Lowpass — darker for low strings, brighter higher up
+    filt.type = 'lowpass';
+    filt.frequency.value = Math.min(freq * 5, 3000);
+    filt.Q.value = 1.4;
 
-    osc.connect(gain);
-    gain.connect(masterGain);
+    // Natural vibrato with delayed onset
+    var vibLFO = audioCtx.createOscillator();
+    var vibAmt = audioCtx.createGain();
+    vibLFO.frequency.value = 5.6;
+    vibAmt.gain.setValueAtTime(0, t0);
+    vibAmt.gain.linearRampToValueAtTime(
+      freq * 0.006,
+      t0 + Math.min(dur * 0.45, 0.26)
+    );
+    vibLFO.connect(vibAmt);
+    vibAmt.connect(osc.frequency);
+    vibAmt.connect(osc2.frequency);
 
-    osc.start(startTime);
-    osc.stop(startTime + durationSec + 0.05);
+    // ADSR
+    var relT = Math.max(t0 + 0.03, t0 + dur - 0.10);
+    gn.gain.setValueAtTime(0.001, t0);
+    gn.gain.linearRampToValueAtTime(vel,        t0 + 0.024);
+    gn.gain.setValueAtTime(vel * 0.74,           relT);
+    gn.gain.exponentialRampToValueAtTime(0.001,  t0 + dur);
+
+    osc.connect(filt); osc2.connect(filt);
+    filt.connect(gn);
+    gn.connect(masterGain);
+    gn.connect(reverbInput);
+
+    var stop = t0 + dur + 0.08;
+    [osc, osc2, vibLFO].forEach(function(o) { o.start(t0); o.stop(stop); });
   }
 
+  /* ── Scheduling ───────────────────────────────────── */
   function scheduleLoop() {
     if (!isPlaying) return;
-
-    var now = audioCtx.currentTime + 0.05;
-
-    MELODY.forEach(function(n) {
-      playNote(n[0], now + n[1] * BEAT, n[2] * BEAT * 0.88, n[3], 'triangle');
+    var t = audioCtx.currentTime + 0.05;
+    BWV1007.forEach(function(bar) {
+      bar.forEach(function(midi) {
+        playCelloNote(midi, t, NOTE * 1.04, 0.52);
+        t += NOTE;
+      });
     });
-
-    BASS.forEach(function(n) {
-      playNote(n[0], now + n[1] * BEAT, n[2] * BEAT * 0.90, n[3], 'sine');
-    });
-
-    PADS.forEach(function(n) {
-      playNote(n[0], now + n[1] * BEAT, n[2] * BEAT * 0.95, n[3], 'sine');
-    });
-
-    var loopMs = LOOP_BEATS * BEAT * 1000;
-    loopTimer = setTimeout(scheduleLoop, loopMs - 150);
+    loopTimer = setTimeout(scheduleLoop, (LOOP_DUR - 0.6) * 1000);
   }
 
   function startMusic() {
-    if (!audioCtx) initAudio();
+    if (!audioCtx) setupAudio();
     if (audioCtx.state === 'suspended') audioCtx.resume();
     isPlaying = true;
     scheduleLoop();
