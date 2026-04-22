@@ -540,90 +540,45 @@
   scaleCard();
 
   /* ═══════════════════════════════════════════════════
-     Background Music — BWV 1007 Cello Suite No.1 Prelude
-     Synthesized via Web Audio API (cello-like timbre)
-     G Major · 32 bars × 8 sixteenth notes · ♩≈75 BPM
+     Background Music
+     Shostakovich · Suite for Variety Orchestra · Waltz No.2
   ═══════════════════════════════════════════════════ */
 
-  var audioCtx    = null;
-  var masterGain  = null;
-  var reverbInput = null;
-  var isPlaying   = false;
-  var loopTimer   = null;
+  var audio     = null;
+  var isPlaying = false;
 
-  // MIDI note number → frequency in Hz
-  function midiToHz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+  function getAudio() {
+    if (!audio) {
+      audio = new Audio('waltz2.mp3');
+      audio.loop   = true;
+      audio.volume = 0.55;
+    }
+    return audio;
+  }
 
-  // BWV 1007 note sequence — MIDI numbers, 8 sixteenth-notes per bar
-  // Ref: G2=43 D3=50 G3=55 B3=59 D4=62  C3=48 E3=52 C4=60 E4=64
-  //      F#3=54 A3=57 F#4=66  B2=47 A2=45 F#2=42  E2=40 Eb3=51
-  var BWV1007 = [
-    // ── Section A · Bars 1-8 · Opening in G major ──────────────
-    [43,50,55,59,62,59,55,50], //  1  G major
-    [43,52,55,60,64,60,55,52], //  2  C / G
-    [50,50,54,57,62,57,54,50], //  3  G / D
-    [43,50,55,59,62,59,55,50], //  4  G major
-    [43,52,55,60,64,60,55,52], //  5  C / G
-    [47,50,55,59,62,59,55,50], //  6  G / B
-    [45,52,57,60,64,60,57,52], //  7  Am7
-    [42,50,54,57,62,57,54,50], //  8  D7 / F#
-    // ── Section B · Bars 9-16 · Harmonic development ───────────
-    [43,50,55,59,62,59,55,50], //  9  G major
-    [53,50,55,59,62,59,55,50], // 10  G7 / F
-    [52,48,55,60,64,60,55,48], // 11  C / E
-    [51,48,55,60,63,60,55,48], // 12  Cm / Eb
-    [50,50,55,59,62,59,55,50], // 13  G / D
-    [50,52,57,60,64,60,57,52], // 14  Am7 / D
-    [50,54,57,60,66,60,57,54], // 15  D7
-    [43,50,55,59,62,59,55,50], // 16  G major
-    // ── Section C · Bars 17-24 · Minor episode ─────────────────
-    [40,47,52,55,59,55,52,47], // 17  Em
-    [40,45,52,57,61,57,52,45], // 18  A7 / E  (C#4=61)
-    [45,52,57,60,64,60,57,52], // 19  Am
-    [43,52,57,60,64,60,57,52], // 20  Am / G
-    [42,54,57,60,63,60,57,54], // 21  F#dim7  (Eb4=63)
-    [47,54,57,63,66,63,57,54], // 22  B7      (D#4=63)
-    [40,47,52,55,59,55,52,47], // 23  Em
-    [36,48,52,55,60,55,52,48], // 24  C major (C2=36)
-    // ── Section D · Bars 25-32 · Return & cadence ──────────────
-    [50,50,55,59,62,59,55,50], // 25  G / D
-    [50,52,57,60,64,60,57,52], // 26  Am7 / D
-    [50,54,57,60,66,60,57,54], // 27  D7
-    [43,50,55,59,62,59,55,50], // 28  G major
-    [43,52,55,60,64,60,55,52], // 29  C / G
-    [50,50,54,57,62,57,54,50], // 30  G / D
-    [50,54,57,60,66,60,57,54], // 31  D7
-    [43,50,55,59,62,59,55,50], // 32  G major (loop end)
-  ];
+  function startMusic() {
+    var a = getAudio();
+    a.play().catch(function() {});
+    isPlaying = true;
+  }
 
-  var NOTE     = 0.200;                          // 16th-note ≈ ♩=75 BPM
-  var LOOP_DUR = BWV1007.length * 8 * NOTE;      // ≈ 51.2 s
+  function stopMusic() {
+    if (audio) { audio.pause(); }
+    isPlaying = false;
+  }
 
-  /* ── Audio graph setup ────────────────────────────── */
-  function setupAudio() {
-    audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.30;
-    masterGain.connect(audioCtx.destination);
-
-    // Hall reverb: three parallel comb filters → wet bus
-    reverbInput = audioCtx.createGain();
-    var wetBus  = audioCtx.createGain();
-    wetBus.gain.value = 0.26;
-    wetBus.connect(audioCtx.destination);
-
-    [[0.37, 0.43], [0.55, 0.38], [0.73, 0.34]].forEach(function(p) {
-      var d = audioCtx.createDelay(2.5);
-      var g = audioCtx.createGain();
-      var f = audioCtx.createBiquadFilter();
-      d.delayTime.value = p[0];
-      g.gain.value      = p[1];
-      f.type = 'lowpass'; f.frequency.value = 3000;
-      reverbInput.connect(d);
-      d.connect(f); f.connect(g);
-      g.connect(d);       // comb feedback
-      g.connect(wetBus);  // wet output
-    });
+  function toggleMusic() {
+    var btn  = document.getElementById('music-btn');
+    var icon = btn.querySelector('.btn-icon');
+    if (isPlaying) {
+      stopMusic();
+      icon.textContent = '♪';
+      btn.classList.remove('playing');
+    } else {
+      startMusic();
+      icon.textContent = '♫';
+      btn.classList.add('playing');
+    }
   }
 
   /* ── Cello note synthesizer ───────────────────────── */
